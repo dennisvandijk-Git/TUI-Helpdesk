@@ -1,0 +1,31 @@
+ChoiceDescription.ps1
+Lock-Out.ps1
+Main-Menu.ps1
+New-Menu.ps1
+test/11.ps1
+test/Menu-Test.ps1
+test/menu.ps1
+test/New-MenuTest.ps1
+test/Show-MenuTest.ps1
+test/test.ps1
+test/test2.ps1
+test/test3.ps1
+test/testest.ps1
+test/Get-ADGroup.ps1
+test/New-MenuV1.ps1
+test/Pap-Script1.ps1
+test/Pap-Script2.ps1
+
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+
+# Local History for Visual Studio Code
+.history/
+
+# Built Visual Studio Code Extensions
+*.vsix
+AddUserRvS/
