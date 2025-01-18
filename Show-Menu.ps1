@@ -64,7 +64,7 @@ function Show-SearchMenu {
         $value = Read-Host "Make a selection, (default is `"4`")"
         switch ($value) {
             '1' {
-                $disabledAccounts = Search-ADAccount -AccountDisabled | Select-Object Name, ObjectClass
+                $disabledAccounts = Search-ADAccount -AccountDisabled | Select-Object Name, LastLogonDate, ObjectClass
                 $disabledAccounts | Format-Table -AutoSize
                 Pause
             }
@@ -193,7 +193,7 @@ function Search-User {
         while ($true) {
             Show-UserDetails $selectedUser.SamAccountName
             New-Menu -options @("Reset Password", "Get AD Groups", "Unlock Account", "Enable Account", "Disable Account", "Add AD Groups", "Remove AD Groups", "Back") -defaultIndex 8
-            $value = Read-Host "Make a selection"
+            $value = Read-Host "Make a selection, (default is `"8`")"
             switch ($value) {
                 '1' {
                     try {
@@ -233,7 +233,7 @@ function Search-User {
     catch {
         Write-Host "`nFout bij het ophalen van de gegevens, probeer het nogmaals."
         Write-Host "ErrorMessage: $_`n"
-        Search-User
+        Show-SubMenuSearchUser
     }
 }
 
@@ -308,11 +308,14 @@ function Show-UserDetails {
 }
 
 function Get-ADGroupsOfUser {
-    "`n"
+    # "`n"
     $userGroups = Get-ADUser -Identity $selectedUser.SamAccountName -Properties MemberOf | Select-Object -ExpandProperty MemberOf
     $groupMembers = $userGroups | ForEach-Object { (Get-ADGroup $_).Name }
     if ($groupMembers) {
-        Write-Host "========== MemberOf =========="
+        # Write-Host ((═ * 10) + " MemberOf " + (═ * 10))
+        Write-Host ("╔" + ("═" * 30) + "╗")
+        Write-Host ("║" + (" " * 11) + "MemberOf" + (" " * 11) + "║")
+        Write-Host ("╚" + ("═" * 30) + "╝")
         $groupMembers
     }
     else {
