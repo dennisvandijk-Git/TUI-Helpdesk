@@ -1,4 +1,13 @@
-﻿function New-Menu {
+﻿$xml = [xml](Get-Content "C:\Scripts\Show-Menu\CONFIG.XML")
+
+# Dynamic variables from XML
+$xml.Values.ChildNodes | ForEach-Object {
+    $Name = $_.Name
+    $Value = $_.InnerText
+    New-Variable -Name $Name -Value $Value 
+}
+
+function New-Menu {
     param (
         [string]$title = "Menu", # Menu Title
         [string[]]$options, # Menu Options
@@ -116,11 +125,8 @@ function Search-ADGroup {
 }
 
 function Reset-Password {
-    # param (
-    #     OptionalParameters
-    # )
     $number = 10..100 | Get-Random
-    $string = "Welkomopderaad$($number)!"
+    $string = "$($pwdString)$($number)$($pwdStringEnd)"
     Write-Host "`nTijdelijk wachtwoord is: $($string)"
     Set-ADAccountPassword -Identity $selectedUser.SamAccountName -Reset -NewPassword (ConvertTo-SecureString -AsPlainText $string -Force) -Confirm
     try {
@@ -186,7 +192,7 @@ function Search-User {
 
         while ($true) {
             Show-UserDetails $selectedUser.SamAccountName
-            New-Menu -options @("Reset Password", "Get AD Groups", "Enable Account", "Unlock Account", "Back") -defaultIndex 5
+            New-Menu -options @("Reset Password", "Get AD Groups", "Unlock Account", "Enable Account", "Disable Account", "Add AD Groups", "Remove AD Groups", "Back") -defaultIndex 8
             $value = Read-Host "Make a selection"
             switch ($value) {
                 '1' {
@@ -199,9 +205,21 @@ function Search-User {
                     # Pause
                 }
                 '2' { Get-ADGroupsOfUser }
-                '3' { Enable-ADAccount -Identity $selectedUser.SamAccountName }
-                '4' { Unlock-ADAccount -Identity $selectedUser.SamAccountName }
-                '5' {
+                '3' { Unlock-ADAccount -Identity $selectedUser.SamAccountName }
+                '4' { Enable-ADAccount -Identity $selectedUser.SamAccountName }
+                '5' { Disable-ADAccount -Identity $selectedUser.SamAccountName }
+                '6' {
+                    Get-ADGroup -Filter * -Properties Name, Description | `
+                        Select-Object Name, Description | Out-GridView -PassThru -Title "Add AD Groups - multiple select possible (ctrl+leftMouseClick) or (ctrl+A) for all" | `
+                        ForEach-Object { Add-ADGroupMember -Identity $_.Name -Members $selectedUser.SamAccountName -Confirm } 
+                }
+                '7' {
+                    Get-ADUser -Identity $selectedUser.SamAccountName -Properties MemberOf | Select-Object -ExpandProperty MemberOf | `
+                        ForEach-Object { Get-ADGroup $_ -Properties Name, Description } | Select-Object Name, Description | `
+                        Out-GridView -PassThru -Title "Remove AD Groups - multiple select possible (ctrl+leftMouseClick) or (ctrl+A) for all" | `
+                        ForEach-Object { Remove-ADGroupMember -Identity $_.Name -Members $selectedUser.SamAccountName -Confirm } 
+                }
+                '8' {
                     Clear-Host
                     Show-SubMenuSearchUser 
                 }
@@ -232,8 +250,11 @@ function Show-UserDetails {
         Write-Host ("║" + (" " * 12) + "User Information" + (" " * 12) + "║")
         Write-Host ("╚" + ("═" * 40) + "╝")
 
+        $domainPasswordPolicy = (Get-ADDefaultDomainPasswordPolicy).MaxPasswordAge
+        $days = $domainPasswordPolicy.Days
+
         $userDetails | 
-        Select-Object Name, SamAccountName, EmailAddress, Title, Department, Office, telephoneNumber, PasswordLastSet, PasswordExpired, LastLogonDate, Manager | 
+        Select-Object Name, SamAccountName, EmailAddress, Title, Department, Office, telephoneNumber, Manager, LastLogonDate, LastBadPasswordAttempt, PasswordLastSet | 
         ForEach-Object {
             # Get all property names and calculate the maximum length
             $propertyNames = $_.PSObject.Properties.Name
@@ -246,22 +267,37 @@ function Show-UserDetails {
 
             }
             
-            if ($userDetails.Enabled -eq $true) {
-                Write-Host " Enabled         : " -NoNewline
-                Write-Host -ForegroundColor Green "$($userDetails.Enabled)"
+            if ($userDetails.PasswordExpired -eq $true) {
+                $expiresOn = $userDetails.PasswordLastSet.AddDays($days)
+                $expiresOverDays = $expiresOn.Subtract($(Get-Date))
+                Write-Host " PasswordExpired        : " -NoNewline
+                Write-Host -ForegroundColor Red "$($userDetails.PasswordExpired)" -NoNewline
+                Write-Host " (Expired on: $($expiresOn))"
             }
             else {
-                Write-Host " Enabled         : " -NoNewline
-                Write-Host -ForegroundColor Red "$($userDetails.Enabled)"
+                $expiresOn = $userDetails.PasswordLastSet.AddDays($days)
+                $expiresOverDays = $expiresOn.Subtract($(Get-Date))
+                $expiresOverDays = $expiresOverDays.ToString("dd'd:'hh'h:'mm'm:'ss's'")
+                Write-Host " PasswordExpired        : " -NoNewline
+                Write-Host -ForegroundColor Green "$($userDetails.PasswordExpired)" -NoNewline
+                Write-Host " (Expires on: $($expiresOn) - $($expiresOverDays) remaining)"
             }
             if ($userDetails.LockedOut -eq $false) {
-                Write-Host " LockedOut       : " -NoNewline
+                Write-Host " LockedOut              : " -NoNewline
                 Write-Host -ForegroundColor Green "$($userDetails.LockedOut)"
             }
             else {
-                Write-Host " LockedOut       : " -NoNewline
-                Write-Host -ForegroundColor Red "$($userDetails.LockedOut)"
-                Write-Host "        - LockoutTime: $($userDetails.AccountLockoutTime)"
+                Write-Host " LockedOut              : " -NoNewline
+                Write-Host -ForegroundColor Red "$($userDetails.LockedOut)" -NoNewline
+                Write-Host " (LockoutTime: $($userDetails.AccountLockoutTime))"
+            }
+            if ($userDetails.Enabled -eq $true) {
+                Write-Host " Enabled                : " -NoNewline
+                Write-Host -ForegroundColor Green "$($userDetails.Enabled)"
+            }
+            else {
+                Write-Host " Enabled                : " -NoNewline
+                Write-Host -ForegroundColor Red "$($userDetails.Enabled)"
             }
         }    
         Write-Host ("═" * 42)
@@ -331,7 +367,7 @@ function main {
 
         Clear-Host
 
-        New-Menu -title "Main Menu" -options @("Search User", "Get User Info", "Search AD Accounts", "Search AD Groups", "Quit")
+        New-Menu -title "Main Menu" -options @("Search User", "Get User Info", "Search AD Accounts", "Search AD Groups", "Custom Command", "Quit")
 
         $value = Read-Host "Make a selection, (default is `"1`")"
         
@@ -351,6 +387,10 @@ function main {
                 Show-SubMenuSearchGroup
             }
             "5" {
+                Write-Host "Entering custom PowerShell Command Prompt. Type 'exit' to leave." -ForegroundColor Cyan
+                powershell.exe -NoExit
+            }
+            "6" {
                 Write-Host "Exiting..."
                 exit
             }

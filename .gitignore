@@ -29,3 +29,10 @@ test/Pap-Script2.ps1
 # Built Visual Studio Code Extensions
 *.vsix
 AddUserRvS/
+Get-ADWhenGroupJoined/Domainlist.xml
+Get-ADWhenGroupJoined/Get-ADWhenGroupJoined.ps1
+Get-ADWhenGroupJoined/Get-ADWhenGroupJoined.txt
+Search-Files/Search-Files.ps1
+CONFIG.XML
+Show-MenuV1.txt
+.vscode/launch.json
