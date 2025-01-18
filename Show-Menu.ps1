@@ -64,8 +64,25 @@ function Show-SearchMenu {
         $value = Read-Host "Make a selection, (default is `"4`")"
         switch ($value) {
             '1' {
-                $disabledAccounts = Search-ADAccount -AccountDisabled | Select-Object Name, LastLogonDate, ObjectClass
-                $disabledAccounts | Format-Table -AutoSize
+                # Get all disabled AD users in the specified OU
+                $disabledUsers = Get-ADUser -Filter { Enabled -eq $false } -SearchBase $OUStandaard -Properties LastLogonDate
+
+                # Iterate through disabled users and fetch replication metadata
+                $metadata = foreach ($user in $disabledUsers) {
+                    $metadataEntry = Get-ADReplicationAttributeMetadata -Object $user.DistinguishedName -Server (Get-ADDomainController).HostName
+                    $disableMetadata = $metadataEntry | Where-Object { $_.AttributeName -eq "userAccountControl" }
+    
+                    [PSCustomObject]@{
+                        UserName           = $user.SamAccountName
+                        LastDisabledTime   = $disableMetadata.LastOriginatingChangeTime
+                        LastLogonTimestamp = $user.LastLogonDate
+                        DistinguishedName  = $user.DistinguishedName
+                    }
+                }
+
+                # Sort the results by LastDisabledTime in descending order and display
+                $metadata | Sort-Object LastDisabledTime -Descending | Format-Table -Wrap
+
                 Pause
             }
             '2' {
