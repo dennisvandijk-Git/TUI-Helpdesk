@@ -148,11 +148,11 @@ function Search-User {
             $results = @(Get-ADUser -Filter $filter -Properties * | Select-Object Name, SamAccountName, UserPrincipalName)
         }
         if ($results) {
-            Clear-Host
+            # Clear-Host
             Write-Host "Search Results:`n"
             $i = 1
             $results | ForEach-Object {
-                Write-Host "[$i]" 
+                Write-Host "[$i]"
                 Write-Host ('═' * 50)
                 Write-Host "Name           : $($_.Name)"
                 Write-Host "SAMAccountName : $($_.SamAccountName)"
@@ -166,21 +166,21 @@ function Search-User {
         }
 
         $selectedIndex = ""
-        while ($selectedIndex -eq "" -or $selectedIndex -notmatch '^\d+$' -or $selectedIndex -lt 1 -or $selectedIndex -gt $results.Count) {
+        while ($selectedIndex -eq "" -or $selectedIndex -notmatch '^\d+$' -or [int]$selectedIndex -lt 1 -or [int]$selectedIndex -gt $results.Count) {
             $selectedIndex = Read-Host "`nEnter the number of the user you want more details about, or (enter) to return."
             
             if ($selectedIndex -eq "") {
-                # Write-Host "Please enter a valid selection."
                 Clear-Host
                 Show-SubMenuSearchUser
             }
             elseif ($selectedIndex -notmatch '^\d+$') {
                 Write-Host "Invalid input. Please enter a valid number."
             }
-            elseif ($selectedIndex -lt 1 -or $selectedIndex -gt $results.Count) {
+            elseif ([int]$selectedIndex -lt 1 -or [int]$selectedIndex -gt $results.Count) {
                 Write-Host "Invalid selection. Please select a number between 1 and $($results.Count)."
             }
         }
+        $selectedIndex = [int]$selectedIndex
 
         $selectedUser = $results[$selectedIndex - 1]
 
