@@ -50,7 +50,30 @@ function New-Menu {
     }
     Write-Host $bottom
 }
+function Get-DisabledADUsers {
 
+    # Get all disabled AD users in the specified OU
+    $disabledUsers = Get-ADUser -Filter { Enabled -eq $false } -SearchBase $OUStandaard -Properties LastLogonDate
+
+    # Iterate through disabled users and fetch replication metadata
+    $metadata = foreach ($user in $disabledUsers) {
+        $metadataEntry = Get-ADReplicationAttributeMetadata -Object $user.DistinguishedName -Server (Get-ADDomainController).HostName
+        $disableMetadata = $metadataEntry | Where-Object { $_.AttributeName -eq "userAccountControl" }
+    
+        [PSCustomObject]@{
+            Name               = $user.Name
+            UserName           = $user.SamAccountName
+            LastDisabledTime   = $disableMetadata.LastOriginatingChangeTime
+            LastLogonTimestamp = $user.LastLogonDate
+        }
+    }
+
+    # Sort the results by LastDisabledTime in descending order and display
+    # $metadata | Sort-Object LastDisabledTime -Descending | Format-Table -Wrap
+    $metadata | Sort-Object LastDisabledTime -Descending | Out-GridView -PassThru -Title "Enable one/multiple AD Accounts" | `
+        ForEach-Object { Enable-ADAccount -Identity $_.UserName -Confirm }
+
+}
 function Show-SearchMenu {
 
     param (
@@ -63,28 +86,7 @@ function Show-SearchMenu {
         New-Menu -title "Search Menu" @("Disabled", "LockedOut", "PasswordExpired", "Back") -defaultIndex 4
         $value = Read-Host "Make a selection, (default is `"4`")"
         switch ($value) {
-            '1' {
-                # Get all disabled AD users in the specified OU
-                $disabledUsers = Get-ADUser -Filter { Enabled -eq $false } -SearchBase $OUStandaard -Properties LastLogonDate
-
-                # Iterate through disabled users and fetch replication metadata
-                $metadata = foreach ($user in $disabledUsers) {
-                    $metadataEntry = Get-ADReplicationAttributeMetadata -Object $user.DistinguishedName -Server (Get-ADDomainController).HostName
-                    $disableMetadata = $metadataEntry | Where-Object { $_.AttributeName -eq "userAccountControl" }
-    
-                    [PSCustomObject]@{
-                        UserName           = $user.SamAccountName
-                        LastDisabledTime   = $disableMetadata.LastOriginatingChangeTime
-                        LastLogonTimestamp = $user.LastLogonDate
-                        DistinguishedName  = $user.DistinguishedName
-                    }
-                }
-
-                # Sort the results by LastDisabledTime in descending order and display
-                $metadata | Sort-Object LastDisabledTime -Descending | Format-Table -Wrap
-
-                Pause
-            }
+            '1' { Get-DisabledADUsers }
             '2' {
                 $lockedAccounts = Search-ADAccount -LockedOut | Select-Object Name, ObjectClass
                 $lockedAccounts | Format-Table -AutoSize
@@ -100,7 +102,6 @@ function Show-SearchMenu {
         }
     }
 }
-
 function Show-SubMenuSearchGroup {
     
     while ($true) {
@@ -119,7 +120,6 @@ function Show-SubMenuSearchGroup {
         }
     }
 }
-
 function Search-ADGroup {
 
     $searchTerm = ""
@@ -140,7 +140,6 @@ function Search-ADGroup {
         }
     }
 }
-
 function Reset-Password {
     $number = 10..100 | Get-Random
     $string = "$($pwdString)$($number)$($pwdStringEnd)"
@@ -253,7 +252,6 @@ function Search-User {
         Show-SubMenuSearchUser
     }
 }
-
 function Show-UserDetails {
     param (
         [string]$SamAccountName
@@ -323,7 +321,6 @@ function Show-UserDetails {
         Write-Host "Could not retrieve details for user: $SamAccountName"
     }
 }
-
 function Get-ADGroupsOfUser {
     # "`n"
     $userGroups = Get-ADUser -Identity $selectedUser.SamAccountName -Properties MemberOf | Select-Object -ExpandProperty MemberOf
@@ -340,8 +337,7 @@ function Get-ADGroupsOfUser {
     }
     "`n"
     Pause
-}
-   
+} 
 function Get-ADUserInfo {
     param(
         [string[]] $user
@@ -359,9 +355,7 @@ function Get-ADUserInfo {
     PasswordExpired, PasswordLastSet, pwdLastSet, SamAccountName, UserPrincipalName, Title, Office, telephoneNumber, `
     @{label = 'MemberOf'; expression = { ($_.MemberOf | ForEach-Object { (Get-ADGroup $_).Name } | Sort-Object) -join "`n" } } | Format-List
     
-}
-
-function Show-SubMenuSearchUser {
+}function Show-SubMenuSearchUser {
     while ($true) {
 
         New-Menu -title "Sub Menu" -options @("Back To Main Menu")
@@ -381,13 +375,50 @@ function Show-SubMenuSearchUser {
         }
     }
 }
+function Show-ExhangeMenu {
+    # param (
+    #     OptionalParameters
+    # )
+    New-Menu -title "ExchangeModule" -options @("Connect", "Search", "Get-Command", "Back") -defaultIndex 4
 
+    $value = Read-Host "Make a selection, (default is `"4`")"
+
+    while ($true) {
+        switch ($value) {
+            "1" {
+                if (Get-ConnectionInformation) {
+                    # Write-Host "Already connected"
+                    Write-Verbose "Already connected" -Verbose
+                    # Pause
+                    Show-ExhangeMenu
+                }
+                else {
+                    Write-Verbose "Connecting.." -Verbose
+                    Connect-ExchangeOnline
+                    Get-ConnectionInformation
+                    Pause
+                    Show-ExhangeMenu
+                }
+            } 
+            "2" {  }
+            "3" {
+                Get-Command -Module ExchangeOnlineManagement | Out-GridView
+                Pause
+                Show-ExhangeMenu 
+            }
+            "4" { main }
+            Default { main }
+        }
+    }
+
+    # Pause
+}
 function main {
     while ($true) {
 
         Clear-Host
 
-        New-Menu -title "Main Menu" -options @("Search User", "Get User Info", "Search AD Accounts", "Search AD Groups", "Custom Command", "Quit")
+        New-Menu -title "Main Menu" -options @("Search User", "Get User Info", "Search AD Accounts", "Search AD Groups", "Custom Command", "ExchangeModule", "Quit")
 
         $value = Read-Host "Make a selection, (default is `"1`")"
         
@@ -410,7 +441,9 @@ function main {
                 Write-Host "Entering custom PowerShell Command Prompt. Type 'exit' to leave." -ForegroundColor Cyan
                 powershell.exe -NoExit
             }
-            "6" {
+            "6" { Show-ExhangeMenu }
+
+            "7" {
                 Write-Host "Exiting..."
                 exit
             }
